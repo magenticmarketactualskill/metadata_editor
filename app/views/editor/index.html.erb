@@ -1,0 +1,452 @@
+<div class="container-xl p-4">
+  <div class="Box mb-3">
+    <div class="Box-header">
+      <h1 class="Box-title">MetaData Editor</h1>
+    </div>
+    <div class="Box-body">
+      <p class="mb-2">Analyze and edit text files with metadata tracking</p>
+      
+      <!-- Folder Selection -->
+      <div id="folder-selection" class="mb-3">
+        <div class="form-group">
+          <label for="folder-path-input">Enter Folder Path:</label>
+          <input type="text" id="folder-path-input" class="form-control input-lg" placeholder="/path/to/your/folder" style="width: 100%%;">
+        </div>
+        <button id="analyze-button" class="btn btn-primary mt-2">Analyze Folder</button>
+      </div>
+
+      <!-- Folder Analysis Results -->
+      <div id="analysis-results" class="Box mt-3" style="display: none;">
+        <div class="Box-header">
+          <h3 class="Box-title">Folder Analysis</h3>
+        </div>
+        <div class="Box-body">
+          <div class="mb-3">
+            <h4>Git Profile</h4>
+            <div id="git-profile"></div>
+          </div>
+          <div class="mb-3">
+            <h4>Framework Profile</h4>
+            <div id="framework-profile"></div>
+          </div>
+          <div class="mb-3">
+            <h4>MetaData Profile</h4>
+            <div id="metadata-profile"></div>
+          </div>
+          <button id="open-editor-button" class="btn btn-primary mt-2">Open Editor</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Three-Column Editor Layout -->
+  <div id="editor-layout" style="display: none;">
+    <div class="d-flex" style="height: calc(100vh - 200px);">
+      <!-- Column 1: Folder Tree -->
+      <div class="Box flex-shrink-0" style="width: 300px; overflow-y: auto; border-right: 1px solid var(--color-border-default);">
+        <div class="Box-header">
+          <h3 class="Box-title">Folder Tree</h3>
+        </div>
+        <div class="Box-body p-0">
+          <div id="folder-tree" class="p-2"></div>
+        </div>
+      </div>
+
+      <!-- Column 2: File Content -->
+      <div class="Box flex-1 mx-2" style="overflow-y: auto;">
+        <div class="Box-header d-flex flex-justify-between flex-items-center">
+          <h3 class="Box-title">File Content</h3>
+          <button id="save-file-button" class="btn btn-sm btn-primary" style="display: none;">Save File</button>
+        </div>
+        <div class="Box-body">
+          <div id="file-info" class="mb-2" style="display: none;">
+            <span class="Label Label--secondary" id="current-file-path"></span>
+          </div>
+          <textarea id="file-content-editor" class="form-control" style="width: 100%%; height: calc(100vh - 350px); font-family: monospace;" placeholder="Select a file to edit..."></textarea>
+        </div>
+      </div>
+
+      <!-- Column 3: MetaData -->
+      <div class="Box flex-shrink-0" style="width: 350px; overflow-y: auto; border-left: 1px solid var(--color-border-default);">
+        <div class="Box-header d-flex flex-justify-between flex-items-center">
+          <h3 class="Box-title">MetaData</h3>
+          <button id="save-metadata-button" class="btn btn-sm btn-primary" style="display: none;">Save MetaData</button>
+        </div>
+        <div class="Box-body">
+          <div id="metadata-display">
+            <p class="color-fg-muted">Select a file to view metadata</p>
+          </div>
+          
+          <!-- Metadata Editor Form -->
+          <div id="metadata-editor" style="display: none;">
+            <div class="mb-3">
+              <h4 class="h5">Attributes</h4>
+              <div id="attributes-editor"></div>
+              <button id="add-attribute-button" class="btn btn-sm mt-2">+ Add Attribute</button>
+            </div>
+            
+            <div class="mb-3">
+              <h4 class="h5">Priorities</h4>
+              <div id="priorities-editor"></div>
+              <button id="add-priority-button" class="btn btn-sm mt-2">+ Add Priority</button>
+            </div>
+
+            <div class="mb-3">
+              <h4 class="h5">Facets</h4>
+              <div id="facets-editor"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let currentFolder = '';
+  let currentFile = '';
+  let folderAnalysis = null;
+
+  // Analyze folder button
+  document.getElementById('analyze-button').addEventListener('click', async () => {
+    const folderPath = document.getElementById('folder-path-input').value.trim();
+    if (!folderPath) {
+      alert('Please enter a folder path');
+      return;
+    }
+
+    try {
+      const response = await fetch('/editor/analyze_folder', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': document.querySelector('[name="csrf-token"]').content
+        },
+        body: JSON.stringify({ folder_path: folderPath })
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        currentFolder = data.folder_path;
+        folderAnalysis = data.analysis;
+        displayAnalysis(data.analysis);
+        document.getElementById('analysis-results').style.display = 'block';
+      } else {
+        alert('Error: ' + data.error);
+      }
+    } catch (error) {
+      alert('Failed to analyze folder: ' + error.message);
+    }
+  });
+
+  // Display analysis results
+  function displayAnalysis(analysis) {
+    // Git Profile
+    const gitProfile = analysis.git_profile;
+    document.getElementById('git-profile').innerHTML = `
+      <ul class="ml-3">
+        <li>Has Git: ${gitProfile.has_git ? '✓' : '✗'}</li>
+        <li>Has Branches: ${gitProfile.has_branches ? '✓' : '✗'} ${gitProfile.has_branches ? `(${gitProfile.branches.join(', ')})` : ''}</li>
+        <li>Has Commits: ${gitProfile.has_commits ? '✓' : '✗'} ${gitProfile.has_commits ? `(${gitProfile.commit_count} commits)` : ''}</li>
+        ${gitProfile.current_branch ? `<li>Current Branch: ${gitProfile.current_branch}</li>` : ''}
+      </ul>
+    `;
+
+    // Framework Profile
+    const frameworkProfile = analysis.framework_profile;
+    let frameworkHtml = '<ul class="ml-3">';
+    
+    if (frameworkProfile.ruby.is_rails_app) {
+      frameworkHtml += '<li>Ruby on Rails Application ✓</li>';
+    } else if (frameworkProfile.ruby.is_gem) {
+      frameworkHtml += '<li>Ruby Gem ✓</li>';
+    } else if (frameworkProfile.ruby.gemfile_exists) {
+      frameworkHtml += '<li>Ruby Project (Gemfile found) ✓</li>';
+    }
+    
+    if (frameworkProfile.typescript.has_typescript) {
+      frameworkHtml += '<li>TypeScript Project ✓</li>';
+    }
+    
+    if (frameworkProfile.javascript.has_javascript) {
+      frameworkHtml += '<li>JavaScript Project ✓</li>';
+    }
+    
+    if (frameworkProfile.rust.has_rust) {
+      frameworkHtml += '<li>Rust Project ✓</li>';
+    }
+    
+    frameworkHtml += '</ul>';
+    document.getElementById('framework-profile').innerHTML = frameworkHtml;
+
+    // MetaData Profile
+    const metadataProfile = analysis.metadata_profile;
+    document.getElementById('metadata-profile').innerHTML = `
+      <ul class="ml-3">
+        <li>Has MetaData (.as directory): ${metadataProfile.has_metadata ? '✓' : '✗'}</li>
+        <li>Has MetaData Dump (attention_dump.json): ${metadataProfile.has_metadata_dump ? '✓' : '✗'}</li>
+      </ul>
+    `;
+  }
+
+  // Open editor button
+  document.getElementById('open-editor-button').addEventListener('click', async () => {
+    document.getElementById('folder-selection').style.display = 'none';
+    document.getElementById('analysis-results').style.display = 'none';
+    document.getElementById('editor-layout').style.display = 'block';
+    
+    // Load folder tree
+    await loadFolderTree();
+  });
+
+  // Load folder tree
+  async function loadFolderTree() {
+    try {
+      const response = await fetch('/editor/folder_tree');
+      const data = await response.json();
+      
+      if (response.ok) {
+        displayFolderTree(data.tree);
+      } else {
+        alert('Error loading folder tree: ' + data.error);
+      }
+    } catch (error) {
+      alert('Failed to load folder tree: ' + error.message);
+    }
+  }
+
+  // Display folder tree
+  function displayFolderTree(node, container = null, level = 0) {
+    if (!container) {
+      container = document.getElementById('folder-tree');
+      container.innerHTML = '';
+    }
+
+    const div = document.createElement('div');
+    div.style.paddingLeft = (level * 15) + 'px';
+    div.className = 'py-1';
+
+    if (node.type === 'directory') {
+      const icon = '<svg class="octicon" width="16" height="16" viewBox="0 0 16 16"><path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z"></path></svg>';
+      div.innerHTML = `<span class="cursor-pointer">${icon} <strong>${node.name}</strong></span>`;
+      
+      const childContainer = document.createElement('div');
+      div.appendChild(childContainer);
+      
+      node.children.forEach(child => {
+        displayFolderTree(child, childContainer, level + 1);
+      });
+    } else {
+      const icon = '<svg class="octicon" width="16" height="16" viewBox="0 0 16 16"><path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z"></path></svg>';
+      div.innerHTML = `<span class="cursor-pointer file-link" data-path="${node.path}">${icon} ${node.name}</span>`;
+      div.querySelector('.file-link').addEventListener('click', () => loadFile(node.path));
+    }
+
+    container.appendChild(div);
+  }
+
+  // Load file content
+  async function loadFile(filePath) {
+    try {
+      const response = await fetch(`/editor/file_content?file_path=${encodeURIComponent(filePath)}`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        currentFile = filePath;
+        document.getElementById('file-content-editor').value = data.content;
+        document.getElementById('current-file-path').textContent = filePath;
+        document.getElementById('file-info').style.display = 'block';
+        document.getElementById('save-file-button').style.display = 'inline-block';
+        
+        // Load metadata for this file
+        await loadFileMetadata(filePath);
+      } else {
+        alert('Error loading file: ' + data.error);
+      }
+    } catch (error) {
+      alert('Failed to load file: ' + error.message);
+    }
+  }
+
+  // Load file metadata
+  async function loadFileMetadata(filePath) {
+    try {
+      const response = await fetch(`/editor/file_metadata?file_path=${encodeURIComponent(filePath)}`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        displayMetadata(data.metadata);
+      } else {
+        alert('Error loading metadata: ' + data.error);
+      }
+    } catch (error) {
+      alert('Failed to load metadata: ' + error.message);
+    }
+  }
+
+  // Display metadata
+  function displayMetadata(metadata) {
+    const metadataDisplay = document.getElementById('metadata-display');
+    const metadataEditor = document.getElementById('metadata-editor');
+    
+    if (metadata.has_metadata) {
+      metadataDisplay.style.display = 'none';
+      metadataEditor.style.display = 'block';
+      document.getElementById('save-metadata-button').style.display = 'inline-block';
+      
+      // Display attributes
+      const attributesEditor = document.getElementById('attributes-editor');
+      attributesEditor.innerHTML = '';
+      Object.entries(metadata.attributes || {}).forEach(([key, value]) => {
+        addAttributeField(key, value);
+      });
+      
+      // Display priorities
+      const prioritiesEditor = document.getElementById('priorities-editor');
+      prioritiesEditor.innerHTML = '';
+      Object.entries(metadata.priorities || {}).forEach(([key, value]) => {
+        addPriorityField(key, value);
+      });
+      
+      // Display facets
+      const facetsEditor = document.getElementById('facets-editor');
+      facetsEditor.innerHTML = metadata.facets && metadata.facets.length > 0 
+        ? `<ul class="ml-3">${metadata.facets.map(f => `<li>${f}</li>`).join('')}</ul>`
+        : '<p class="color-fg-muted">No facets</p>';
+    } else {
+      metadataDisplay.style.display = 'block';
+      metadataDisplay.innerHTML = '<p class="color-fg-muted">No metadata found for this file</p>';
+      metadataEditor.style.display = 'none';
+      document.getElementById('save-metadata-button').style.display = 'none';
+    }
+  }
+
+  // Add attribute field
+  function addAttributeField(key = '', value = '') {
+    const attributesEditor = document.getElementById('attributes-editor');
+    const div = document.createElement('div');
+    div.className = 'form-group mb-2';
+    div.innerHTML = `
+      <div class="d-flex">
+        <input type="text" class="form-control mr-1 attr-key" placeholder="Key" value="${key}" style="flex: 1;">
+        <input type="text" class="form-control attr-value" placeholder="Value" value="${value}" style="flex: 1;">
+      </div>
+    `;
+    attributesEditor.appendChild(div);
+  }
+
+  // Add priority field
+  function addPriorityField(key = '', value = '') {
+    const prioritiesEditor = document.getElementById('priorities-editor');
+    const div = document.createElement('div');
+    div.className = 'form-group mb-2';
+    div.innerHTML = `
+      <div class="d-flex">
+        <input type="text" class="form-control mr-1 priority-key" placeholder="Key" value="${key}" style="flex: 1;">
+        <input type="text" class="form-control priority-value" placeholder="Value (0.0-1.0)" value="${value}" style="flex: 1;">
+      </div>
+    `;
+    prioritiesEditor.appendChild(div);
+  }
+
+  // Add attribute button
+  document.getElementById('add-attribute-button').addEventListener('click', () => {
+    addAttributeField();
+  });
+
+  // Add priority button
+  document.getElementById('add-priority-button').addEventListener('click', () => {
+    addPriorityField();
+  });
+
+  // Save file button
+  document.getElementById('save-file-button').addEventListener('click', async () => {
+    const content = document.getElementById('file-content-editor').value;
+    
+    try {
+      const response = await fetch('/editor/update_file', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': document.querySelector('[name="csrf-token"]').content
+        },
+        body: JSON.stringify({ 
+          file_path: currentFile,
+          content: content
+        })
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        alert('File saved successfully!');
+      } else {
+        alert('Error saving file: ' + data.error);
+      }
+    } catch (error) {
+      alert('Failed to save file: ' + error.message);
+    }
+  });
+
+  // Save metadata button
+  document.getElementById('save-metadata-button').addEventListener('click', async () => {
+    // Collect attributes
+    const attributes = {};
+    document.querySelectorAll('#attributes-editor .form-group').forEach(group => {
+      const key = group.querySelector('.attr-key').value.trim();
+      const value = group.querySelector('.attr-value').value.trim();
+      if (key) attributes[key] = value;
+    });
+    
+    // Collect priorities
+    const priorities = {};
+    document.querySelectorAll('#priorities-editor .form-group').forEach(group => {
+      const key = group.querySelector('.priority-key').value.trim();
+      const value = group.querySelector('.priority-value').value.trim();
+      if (key) priorities[key] = value;
+    });
+    
+    try {
+      const response = await fetch('/editor/update_metadata', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': document.querySelector('[name="csrf-token"]').content
+        },
+        body: JSON.stringify({ 
+          file_path: currentFile,
+          metadata: {
+            attributes: attributes,
+            priorities: priorities,
+            facets: []
+          }
+        })
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        alert('Metadata saved successfully!');
+      } else {
+        alert('Error saving metadata: ' + data.error);
+      }
+    } catch (error) {
+      alert('Failed to save metadata: ' + error.message);
+    }
+  });
+</script>
+
+<style>
+  .cursor-pointer {
+    cursor: pointer;
+  }
+  .cursor-pointer:hover {
+    text-decoration: underline;
+  }
+  .octicon {
+    display: inline-block;
+    vertical-align: text-bottom;
+    fill: currentColor;
+  }
+</style>

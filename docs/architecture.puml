@@ -1,0 +1,117 @@
+@startuml MetaData Editor Architecture
+
+!define CONTROLLER_COLOR #E8F5E9
+!define SERVICE_COLOR #E3F2FD
+!define MODEL_COLOR #FFF3E0
+
+package "Controllers" <<Rectangle>> {
+  class EditorController <<CONTROLLER_COLOR>> {
+    +index()
+    +analyze_folder()
+    +folder_tree()
+    +file_content()
+    +file_metadata()
+    +update_file()
+    +update_metadata()
+    +all_metadata()
+  }
+}
+
+package "Services" <<Rectangle>> {
+  class FolderAnalyzer <<SERVICE_COLOR>> {
+    -folder_path: String
+    +analyze(): Hash
+    -analyze_git_profile(): Hash
+    -analyze_framework_profile(): Hash
+    -analyze_ruby_framework(): Hash
+    -analyze_typescript_framework(): Hash
+    -analyze_javascript_framework(): Hash
+    -analyze_rust_framework(): Hash
+    -analyze_metadata_profile(): Hash
+  }
+
+  class FolderTreeBuilder <<SERVICE_COLOR>> {
+    -root_path: String
+    +build_tree(): Hash
+    -build_node(path, root): Hash
+    -skip_directory?(name): Boolean
+  }
+
+  class MetadataReader <<SERVICE_COLOR>> {
+    -folder_path: String
+    +read_metadata_for_file(file_path): Hash
+    +read_all_metadata(): Hash
+    -read_from_dump(dump_file, file_path): Hash
+    -read_from_as_directory(as_dir, file_path): Hash
+    -read_as_directory_structure(as_dir): Hash
+    -parse_ini_file(file_path): Hash
+  }
+
+  class MetadataWriter <<SERVICE_COLOR>> {
+    -folder_path: String
+    +write_metadata(file_path, metadata): Boolean
+    +write_all_metadata(metadata_hash): Boolean
+    -write_to_dump(dump_file, file_path, metadata): Boolean
+    -write_to_as_directory(as_dir, file_path, metadata): Boolean
+    -create_new_dump(dump_file, file_path, metadata): Boolean
+    -write_ini_section(file_path, section_name, data): void
+    -parse_ini_content(content): Hash
+    -generate_ini_content(sections): String
+  }
+}
+
+package "Views" <<Rectangle>> {
+  class "editor/index.html.erb" <<View>> {
+    +folder_selection_form
+    +analysis_results_display
+    +three_column_editor_layout
+    +folder_tree_column
+    +file_content_column
+    +metadata_column
+  }
+}
+
+package "External Dependencies" <<Rectangle>> {
+  class Rugged <<External>> {
+    +Repository
+    +Walker
+  }
+}
+
+' Relationships
+EditorController --> FolderAnalyzer : uses
+EditorController --> FolderTreeBuilder : uses
+EditorController --> MetadataReader : uses
+EditorController --> MetadataWriter : uses
+EditorController --> "editor/index.html.erb" : renders
+
+FolderAnalyzer --> Rugged : uses for Git operations
+
+' Notes
+note right of FolderAnalyzer
+  Analyzes folders for:
+  - Git Profile (branches, commits)
+  - Framework Profile (Ruby, JS, TS, Rust)
+  - MetaData Profile (.as, attention_dump.json)
+end note
+
+note right of MetadataReader
+  Reads metadata from:
+  - attention_dump.json
+  - .as directory with INI files
+end note
+
+note right of MetadataWriter
+  Writes metadata to:
+  - attention_dump.json (preferred)
+  - .as directory INI files
+end note
+
+note bottom of "editor/index.html.erb"
+  Three-column layout:
+  1. Folder Tree (navigation)
+  2. File Content (editor)
+  3. MetaData (attributes/priorities)
+end note
+
+@enduml
